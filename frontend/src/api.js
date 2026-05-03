@@ -38,6 +38,7 @@ export const api = {
   planterDiscover: () => request('/planter/discover'),
   planterAction: (payload) => request('/planter/action', { method: 'POST', body: JSON.stringify(payload) }),
   planterSaved: () => request('/planter/saved'),
+  removeSavedSpecies: (speciesId) => request(`/planter/saved/${speciesId}`, { method: 'DELETE' }),
   addSavedToCollection: (payload) => request('/planter/add-to-collection', { method: 'POST', body: JSON.stringify(payload) }),
 
   askPlantCoach: (payload) => request('/plant-coach', { method: 'POST', body: JSON.stringify(payload) }),

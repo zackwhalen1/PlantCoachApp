@@ -15,7 +15,18 @@ const initialPlant = {
   notes: '',
 }
 
-export function PlantForm({ environments, initialValue, onSubmit, onCancel }) {
+const categoryOptions = [
+  'foliage',
+  'trailing',
+  'tropical',
+  'succulent_like',
+  'fern',
+  'flowering',
+  'herb',
+  'cactus',
+]
+
+export function PlantForm({ environments, speciesCatalog = [], initialValue, onSubmit, onCancel }) {
   const [form, setForm] = useState(initialPlant)
   const [error, setError] = useState('')
 
@@ -24,15 +35,42 @@ export function PlantForm({ environments, initialValue, onSubmit, onCancel }) {
   }, [initialValue])
 
   const envOptions = useMemo(() => [{ id: '', name: 'Unassigned' }, ...environments], [environments])
+  const normalizedSpeciesCatalog = useMemo(
+    () =>
+      (speciesCatalog || []).filter((item) => item.common_name && item.scientific_name).map((item) => ({
+        common_name: item.common_name,
+        scientific_name: item.scientific_name,
+      })),
+    [speciesCatalog],
+  )
+
+  const commonNameSuggestions = useMemo(() => {
+    const query = (form.common_name || '').trim().toLowerCase()
+    if (!query) {
+      return []
+    }
+    return normalizedSpeciesCatalog
+      .filter((item) => item.common_name.toLowerCase().includes(query))
+      .slice(0, 6)
+  }, [form.common_name, normalizedSpeciesCatalog])
 
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  function handleCommonNameChange(value) {
+    updateField('common_name', value)
+  }
+
+  function applySuggestion(suggestion) {
+    updateField('common_name', suggestion.common_name)
+    updateField('species_name', suggestion.scientific_name)
+  }
+
   function handleSubmit(event) {
     event.preventDefault()
     if (!form.nickname || !form.common_name || !form.species_name) {
-      setError('Nickname, common name, and species are required.')
+      setError('Nickname, common name, and scientific name are required.')
       return
     }
     setError('')
@@ -43,12 +81,32 @@ export function PlantForm({ environments, initialValue, onSubmit, onCancel }) {
     <form className="mt-4 grid gap-3" onSubmit={handleSubmit}>
       <div className="grid gap-3 md:grid-cols-3">
         <Input label="Nickname" value={form.nickname} onChange={(v) => updateField('nickname', v)} />
-        <Input label="Common Name" value={form.common_name} onChange={(v) => updateField('common_name', v)} />
-        <Input label="Species" value={form.species_name} onChange={(v) => updateField('species_name', v)} />
+        <div>
+          <Input label="Common Name" value={form.common_name} onChange={handleCommonNameChange} />
+          {commonNameSuggestions.length > 0 && (
+            <div className="mt-1 rounded-lg border border-emerald-900/15 bg-white p-1">
+              {commonNameSuggestions.map((suggestion) => (
+                <button
+                  key={`${suggestion.common_name}-${suggestion.scientific_name}`}
+                  type="button"
+                  className="w-full rounded-md px-2 py-1 text-left text-xs text-emerald-900 hover:bg-emerald-50"
+                  onClick={() => applySuggestion(suggestion)}
+                >
+                  {suggestion.common_name} - {suggestion.scientific_name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <Input
+          label="Scientific Name"
+          value={form.species_name}
+          onChange={(v) => updateField('species_name', v)}
+        />
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <Input label="Category" value={form.category} onChange={(v) => updateField('category', v)} />
+        <Select label="Category" value={form.category} options={categoryOptions} onChange={(v) => updateField('category', v)} />
         <Input label="Date Acquired" type="date" value={form.date_acquired} onChange={(v) => updateField('date_acquired', v)} />
         <Select
           label="Pot Size"

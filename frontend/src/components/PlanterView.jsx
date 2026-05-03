@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { api } from '../api'
 import { ActionButton, EmptyState, Surface } from './UI'
@@ -10,9 +10,12 @@ const FLY_DURATION_MS = 320
 export function PlanterView({ discover, saved, environments, onUpdated }) {
   const [dismissed, setDismissed] = useState(new Set())
   const [detailsId, setDetailsId] = useState(null)
+  const [lightbox, setLightbox] = useState(null)
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false })
   const [flying, setFlying] = useState(null) // 'right' | 'left' | null
+  const [wikiImagesByKey, setWikiImagesByKey] = useState({})
   const dragOrigin = useRef(null)
+  const requestedWikiKeys = useRef(new Set())
 
   const visible = useMemo(
     () => discover.filter((item) => !saved.some((s) => s.id === item.id) && !dismissed.has(item.id)),
@@ -22,17 +25,74 @@ export function PlanterView({ discover, saved, environments, onUpdated }) {
   const next = visible[1] || null
   const details = saved.find((item) => item.id === detailsId)
 
-  function fallbackImage(item) {
-    return `https://loremflickr.com/1200/900/${encodeURIComponent(
-      `${item.common_name} ${item.scientific_name} houseplant`,
-    )}`
+  function speciesKey(item) {
+    return (item?.scientific_name || item?.common_name || item?.id || '').trim().toLowerCase()
+  }
+
+  useEffect(() => {
+    const itemsToResolve = [...discover, ...saved]
+
+    for (const item of itemsToResolve) {
+      const key = speciesKey(item)
+      if (!key || wikiImagesByKey[key] || requestedWikiKeys.current.has(key)) {
+        continue
+      }
+
+      requestedWikiKeys.current.add(key)
+
+      const titles = [item.scientific_name, item.common_name].filter(Boolean)
+
+      ;(async () => {
+        for (const title of titles) {
+          try {
+            const response = await fetch(
+              `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+            )
+            if (!response.ok) {
+              continue
+            }
+
+            const payload = await response.json()
+            const imageUrl = payload?.originalimage?.source || payload?.thumbnail?.source || ''
+
+            if (imageUrl) {
+              setWikiImagesByKey((prev) => ({ ...prev, [key]: imageUrl }))
+              return
+            }
+          } catch {
+            // Ignore and continue trying fallbacks.
+          }
+        }
+      })()
+    }
+  }, [discover, saved, wikiImagesByKey])
+
+  function articleImageCandidates(item) {
+    const seed = encodeURIComponent(`${item?.id || 'plant'}-${item?.common_name || 'species'}`)
+    const wikiImage = wikiImagesByKey[speciesKey(item)]
+    return [
+      wikiImage,
+      item?.image_url,
+      `https://picsum.photos/seed/${seed}-1/1200/675`,
+      `https://picsum.photos/seed/${seed}-2/900/506`,
+      'https://picsum.photos/seed/plantcoach-default/1200/675',
+    ].filter(Boolean)
+  }
+
+  function getPrimaryImage(item) {
+    return articleImageCandidates(item)[0]
   }
 
   function handleImageError(event, item) {
     const target = event.currentTarget
-    if (target.dataset.fallbackApplied === '1') return
-    target.dataset.fallbackApplied = '1'
-    target.src = fallbackImage(item)
+    const candidates = articleImageCandidates(item)
+    const currentIndex = Number(target.dataset.imageIndex || '0')
+    const nextIndex = currentIndex + 1
+
+    if (nextIndex < candidates.length) {
+      target.dataset.imageIndex = String(nextIndex)
+      target.src = candidates[nextIndex]
+    }
   }
 
   async function commit(action) {
@@ -54,6 +114,23 @@ export function PlanterView({ discover, saved, environments, onUpdated }) {
   async function addToCollection(speciesId) {
     await api.addSavedToCollection({ species_id: speciesId, environment_id: environments[0]?.id || null })
     await onUpdated()
+  }
+
+  async function removeFromSaved(speciesId) {
+    await api.removeSavedSpecies(speciesId)
+    if (detailsId === speciesId) {
+      setDetailsId(null)
+    }
+    await onUpdated()
+  }
+
+  function openLightbox(item) {
+    setLightbox({
+      src: getPrimaryImage(item),
+      title: item.common_name,
+      subtitle: item.scientific_name,
+      item,
+    })
   }
 
   function onPointerDown(event) {
@@ -136,11 +213,14 @@ export function PlanterView({ discover, saved, environments, onUpdated }) {
                   }}
                 >
                   <img
-                    src={next.image_url}
+                    src={getPrimaryImage(next)}
                     alt={next.common_name}
-                    className="h-80 w-full object-cover"
+                    className="h-56 w-full object-cover"
                     loading="lazy"
+                    referrerPolicy="no-referrer"
+                    data-image-index="0"
                     onError={(event) => handleImageError(event, next)}
+                    onClick={() => openLightbox(next)}
                   />
                   <div className="p-4">
                     <h4 className="font-display text-xl text-emerald-950">{next.common_name}</h4>
@@ -174,12 +254,18 @@ export function PlanterView({ discover, saved, environments, onUpdated }) {
                 </div>
 
                 <img
-                  src={current.image_url}
+                  src={getPrimaryImage(current)}
                   alt={current.common_name}
-                  className="h-80 w-full object-cover"
+                  className="h-56 w-full border-b border-emerald-900/10 object-cover"
                   draggable={false}
                   loading="lazy"
+                  referrerPolicy="no-referrer"
+                  data-image-index="0"
                   onError={(event) => handleImageError(event, current)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    openLightbox(current)
+                  }}
                 />
 
                 <div className="grid gap-2 overflow-y-auto p-4" style={{ maxHeight: '240px' }}>
@@ -246,18 +332,31 @@ export function PlanterView({ discover, saved, environments, onUpdated }) {
         <ul className="mt-3 grid gap-2 text-sm">
           {saved.map((item) => (
             <li key={item.id} className="rounded-xl border border-emerald-900/15 bg-emerald-50/50 p-2">
-              <p className="font-medium text-emerald-950">{item.common_name}</p>
-              <p className="text-xs italic text-emerald-900/60">{item.scientific_name}</p>
+              <div className="flex gap-2">
+                <img
+                  src={getPrimaryImage(item)}
+                  alt={item.common_name}
+                  className="h-20 w-28 shrink-0 cursor-zoom-in rounded-lg border border-emerald-900/10 object-cover"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  data-image-index="0"
+                  onError={(event) => handleImageError(event, item)}
+                  onClick={() => openLightbox(item)}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-emerald-950">{item.common_name}</p>
+                  <p className="truncate text-xs italic text-emerald-900/60">{item.scientific_name}</p>
+                </div>
+              </div>
               <div className="mt-2 flex gap-2">
-                <ActionButton
-                  variant="secondary"
-                  className="px-2 py-1 text-xs"
-                  onClick={() => setDetailsId(item.id)}
-                >
+                <ActionButton variant="secondary" className="px-2 py-1 text-xs" onClick={() => setDetailsId(item.id)}>
                   Details
                 </ActionButton>
                 <ActionButton className="px-2 py-1 text-xs" onClick={() => addToCollection(item.id)}>
                   + Collection
+                </ActionButton>
+                <ActionButton variant="danger" className="px-2 py-1 text-xs" onClick={() => removeFromSaved(item.id)}>
+                  Remove
                 </ActionButton>
               </div>
             </li>
@@ -284,10 +383,13 @@ export function PlanterView({ discover, saved, environments, onUpdated }) {
             <div className="grid max-h-[calc(92vh-72px)] gap-0 overflow-y-auto md:grid-cols-[1.25fr_1fr]">
               <div className="bg-emerald-50/40 p-4">
                 <img
-                  src={details.image_url}
+                  src={getPrimaryImage(details)}
                   alt={details.common_name}
-                  className="h-[26rem] w-full rounded-2xl border border-emerald-900/10 object-cover"
+                  className="h-[26rem] w-full cursor-zoom-in rounded-2xl border border-emerald-900/10 object-cover"
+                  referrerPolicy="no-referrer"
+                  data-image-index="0"
                   onError={(event) => handleImageError(event, details)}
+                  onClick={() => openLightbox(details)}
                 />
                 <div className="mt-3 flex flex-wrap gap-2">
                   {details.tags.map((tag) => (
@@ -332,10 +434,46 @@ export function PlanterView({ discover, saved, environments, onUpdated }) {
                   </p>
                 </div>
                 <div className="pt-1">
-                  <ActionButton onClick={() => addToCollection(details.id)}>Add This Plant to My Collection</ActionButton>
+                  <div className="flex flex-wrap gap-2">
+                    <ActionButton onClick={() => addToCollection(details.id)}>Add This Plant to My Collection</ActionButton>
+                    <ActionButton variant="danger" onClick={() => removeFromSaved(details.id)}>
+                      Remove From Saved
+                    </ActionButton>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="w-full max-w-6xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between text-white">
+              <div>
+                <p className="font-display text-2xl">{lightbox.title}</p>
+                <p className="text-sm text-white/80 italic">{lightbox.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg border border-white/40 px-3 py-1.5 text-sm hover:bg-white/10"
+                onClick={() => setLightbox(null)}
+              >
+                Close
+              </button>
+            </div>
+            <img
+              src={lightbox.src}
+              alt={lightbox.title}
+              className="max-h-[80vh] w-full rounded-2xl object-contain"
+              referrerPolicy="no-referrer"
+              data-image-index="0"
+              onError={(event) => handleImageError(event, lightbox.item)}
+            />
           </div>
         </div>
       )}

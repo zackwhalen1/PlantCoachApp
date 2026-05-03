@@ -38,7 +38,33 @@ function getMonthGrid(viewDate) {
   })
 }
 
-export function CareCalendarView({ tasks, onToggleTask, onRefresh }) {
+function buildPlantsById(plants) {
+  return Object.fromEntries((plants || []).map((plant) => [plant.id, plant]))
+}
+
+function resolvePlantLabel(task, plantsById) {
+  const sourcePlant = plantsById[task.plant_id] || null
+  const nickname = (task.plant_nickname || sourcePlant?.nickname || '').trim()
+  const species = (task.plant_species_name || task.species_name || sourcePlant?.species_name || '').trim()
+  return nickname || species || 'Unknown Plant'
+}
+
+function groupTasksByPlant(taskList, plantsById) {
+  const grouped = new Map()
+
+  for (const task of taskList) {
+    const label = resolvePlantLabel(task, plantsById)
+    const key = task.plant_id || label
+    if (!grouped.has(key)) {
+      grouped.set(key, { key, label, tasks: [] })
+    }
+    grouped.get(key).tasks.push(task)
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => a.label.localeCompare(b.label))
+}
+
+export function CareCalendarView({ tasks, plants, onToggleTask, onRefresh }) {
   const [viewDate, setViewDate] = useState(() => new Date())
   const [selectedDateKey, setSelectedDateKey] = useState(() => formatDateKey(new Date()))
 
@@ -56,8 +82,13 @@ export function CareCalendarView({ tasks, onToggleTask, onRefresh }) {
   }, [tasks])
 
   const monthGrid = useMemo(() => getMonthGrid(viewDate), [viewDate])
+  const plantsById = useMemo(() => buildPlantsById(plants), [plants])
 
   const selectedTasks = tasksByDate.get(selectedDateKey) || []
+  const selectedPlantGroups = useMemo(
+    () => groupTasksByPlant(selectedTasks, plantsById),
+    [selectedTasks, plantsById],
+  )
   const selectedDate = parseDateKey(selectedDateKey)
 
   function goToPreviousMonth() {
@@ -113,6 +144,7 @@ export function CareCalendarView({ tasks, onToggleTask, onRefresh }) {
               {monthGrid.map((cellDate) => {
                 const cellKey = formatDateKey(cellDate)
                 const cellTasks = tasksByDate.get(cellKey) || []
+                const cellPlantGroups = groupTasksByPlant(cellTasks, plantsById)
                 const inCurrentMonth = cellDate.getMonth() === viewDate.getMonth()
                 const isSelected = cellKey === selectedDateKey
                 const isToday = cellKey === todayKey
@@ -146,20 +178,26 @@ export function CareCalendarView({ tasks, onToggleTask, onRefresh }) {
 
                     {cellTasks.length > 0 && (
                       <div className="mt-2 space-y-1">
-                        {cellTasks.slice(0, 2).map((task) => (
-                          <p
-                            key={task.id}
-                            className={`truncate rounded px-1 py-0.5 text-[11px] ${
-                              task.completed
-                                ? 'bg-emerald-100 text-emerald-900/65 line-through'
-                                : 'bg-lime-100 text-emerald-950'
-                            }`}
-                          >
-                            {task.plant_nickname}
-                          </p>
-                        ))}
-                        {cellTasks.length > 2 && (
-                          <p className="text-[11px] text-emerald-900/70">+{cellTasks.length - 2} more</p>
+                        {cellPlantGroups.slice(0, 2).map((group) => {
+                          const allCompleted = group.tasks.every((task) => task.completed)
+
+                          return (
+                            <div
+                              key={group.key}
+                              className={`rounded px-1 py-1 text-[11px] ${
+                                allCompleted
+                                  ? 'bg-emerald-100 text-emerald-900/65'
+                                  : 'bg-lime-100 text-emerald-950'
+                              }`}
+                            >
+                              <p className={`truncate font-medium ${allCompleted ? 'line-through' : ''}`}>
+                                {group.label}
+                              </p>
+                            </div>
+                          )
+                        })}
+                        {cellPlantGroups.length > 2 && (
+                          <p className="text-[11px] text-emerald-900/70">+{cellPlantGroups.length - 2} more plants</p>
                         )}
                       </div>
                     )}
@@ -191,26 +229,34 @@ export function CareCalendarView({ tasks, onToggleTask, onRefresh }) {
 
             {selectedTasks.length > 0 && (
               <ul className="mt-3 grid gap-2 text-sm">
-                {selectedTasks.map((task) => (
+                {selectedPlantGroups.map((group) => (
                   <li
-                    key={task.id}
+                    key={group.key}
                     className={`rounded-lg border p-2 ${
-                      task.completed
+                      group.tasks.every((task) => task.completed)
                         ? 'border-emerald-900/10 bg-emerald-50/40 text-emerald-900/65'
                         : 'border-emerald-900/20 bg-white text-emerald-950'
                     }`}
                   >
-                    <p className={`font-medium ${task.completed ? 'line-through' : ''}`}>
-                      {taskLabels[task.type] || task.type}
-                    </p>
-                    <p className="mt-0.5 text-xs">{task.plant_nickname}</p>
-                    <ActionButton
-                      className="mt-2 px-2 py-1 text-xs"
-                      variant={task.completed ? 'secondary' : 'primary'}
-                      onClick={() => onToggleTask(task.id)}
-                    >
-                      {task.completed ? 'Mark Incomplete' : 'Mark Complete'}
-                    </ActionButton>
+                    <p className="font-medium">{group.label}</p>
+                    <ul className="mt-1 grid gap-1 text-xs">
+                      {group.tasks.map((task) => (
+                        <li key={task.id} className="rounded border border-emerald-900/10 px-2 py-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className={task.completed ? 'line-through text-emerald-900/65' : ''}>
+                              {taskLabels[task.type] || task.type}
+                            </p>
+                            <ActionButton
+                              className="px-2 py-1 text-xs"
+                              variant={task.completed ? 'secondary' : 'primary'}
+                              onClick={() => onToggleTask(task.id)}
+                            >
+                              {task.completed ? 'Undo' : 'Done'}
+                            </ActionButton>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </li>
                 ))}
               </ul>

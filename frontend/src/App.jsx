@@ -132,7 +132,7 @@ function App() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-emerald-800">GreenrThumb</p>
-              <h1 className="font-display text-3xl text-emerald-950 md:text-4xl">Design-Centered Plant Care</h1>
+              <h1 className="font-display text-3xl text-emerald-950 md:text-4xl">Plant Care Made Easy</h1>
             </div>
             <p className="max-w-md text-sm text-emerald-900/70">{statusMessage}</p>
           </div>
@@ -155,16 +155,19 @@ function App() {
       </header>
 
       <main className="mx-auto mt-6 grid max-w-7xl gap-5 px-4 md:px-8">
-        {activeTab === 'dashboard' && <DashboardView data={dashboard} onQuickAction={setActiveTab} />}
+        {activeTab === 'dashboard' && (
+          <DashboardView data={dashboard} onQuickAction={setActiveTab} onNavigate={setActiveTab} />
+        )}
 
         {activeTab === 'plants' && (
           <Surface>
             <SectionTitle
-              title="Plant Profile Manager"
+              title="Plant Manager"
               subtitle="Create, edit, assign, and track individual plant records."
             />
             <PlantForm
               environments={environments}
+              speciesCatalog={discover}
               initialValue={editingPlant}
               onSubmit={handleCreatePlant}
               onCancel={editingPlant ? () => setEditingPlant(null) : null}
@@ -282,7 +285,7 @@ function App() {
         )}
 
         {activeTab === 'calendar' && (
-          <CareCalendarView tasks={tasks} onToggleTask={handleToggleTask} onRefresh={refreshEverything} />
+          <CareCalendarView tasks={tasks} plants={plants} onToggleTask={handleToggleTask} onRefresh={refreshEverything} />
         )}
 
         {activeTab === 'compatibility' && <CompatibilityPanel plants={plants} environments={environments} />}

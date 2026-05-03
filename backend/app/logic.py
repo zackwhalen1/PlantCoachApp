@@ -369,21 +369,83 @@ def summarize_dashboard(plants: List[Dict[str, Any]], tasks: List[Dict[str, Any]
         elif due <= today + timedelta(days=4):
             risk_map[task["plant_id"]] = risk_map.get(task["plant_id"], 0) + 1
 
-    highest_risk = sorted(
-        [
+    task_remedies = {
+        "check_soil": "Check top 1-2 inches of soil; water only if dry and improve airflow around the pot.",
+        "water_if_needed": "Give a deep, even watering if soil is dry, then drain excess to prevent root stress.",
+        "fertilize": "Apply a diluted balanced fertilizer and skip feeding if the plant looks stressed.",
+        "inspect_pests": "Inspect leaf undersides and stems, isolate if needed, and wipe leaves to reduce pests.",
+        "rotate": "Rotate the pot a quarter turn to keep growth even and prevent leaning.",
+        "growth_photo": "Take a progress photo and compare with last week to catch early decline.",
+        "consider_repotting": "Check roots for crowding and repot one size up only if roots are circling.",
+    }
+
+    plant_map = {plant["id"]: plant for plant in plants}
+    risk_entries = []
+    for pid, score in risk_map.items():
+        plant = plant_map.get(pid, {})
+        nickname = (plant.get("nickname") or "").strip()
+        species_name = (plant.get("species_name") or "").strip()
+        display_name = nickname or species_name or "Unknown"
+
+        due_risk_tasks = [
+            task
+            for task in upcoming
+            if (
+                task.get("plant_id") == pid
+                and not task.get("completed")
+                and datetime.fromisoformat(task["due_date"]).date() <= today + timedelta(days=4)
+            )
+        ]
+
+        seen_types = set()
+        ordered_task_types = []
+        for task in due_risk_tasks:
+            task_type = task.get("type")
+            if task_type and task_type not in seen_types:
+                seen_types.add(task_type)
+                ordered_task_types.append(task_type)
+
+        recommended_actions = [
+            task_remedies[task_type]
+            for task_type in ordered_task_types
+            if task_type in task_remedies
+        ][:4]
+        if not recommended_actions:
+            recommended_actions = [
+                "Review due tasks for this plant today and complete the most urgent care step first.",
+            ]
+
+        urgent_task_count = sum(
+            1
+            for task in due_risk_tasks
+            if datetime.fromisoformat(task["due_date"]).date() <= today + timedelta(days=1)
+        )
+        soon_task_count = sum(
+            1
+            for task in due_risk_tasks
+            if today + timedelta(days=1) < datetime.fromisoformat(task["due_date"]).date() <= today + timedelta(days=4)
+        )
+
+        risk_explanation = (
+            f"Risk {score} = ({urgent_task_count} urgent task{'s' if urgent_task_count != 1 else ''} x 2) + "
+            f"({soon_task_count} near-term task{'s' if soon_task_count != 1 else ''} x 1)."
+        )
+
+        risk_entries.append(
             {
                 "plant_id": pid,
                 "risk_score": score,
-                "plant_nickname": next(
-                    (p["nickname"] for p in plants if p["id"] == pid),
-                    "Unknown",
-                ),
+                "plant_nickname": nickname,
+                "plant_species_name": species_name,
+                "plant_display_name": display_name,
+                "urgent_task_count": urgent_task_count,
+                "soon_task_count": soon_task_count,
+                "risk_explanation": risk_explanation,
+                "recommended_actions": recommended_actions,
             }
-            for pid, score in risk_map.items()
-        ],
-        key=lambda x: x["risk_score"],
-        reverse=True,
-    )[:4]
+        )
+
+    highest_risk = sorted(risk_entries, key=lambda x: x["risk_score"], reverse=True)[:4]
 
     return {
         "plant_count": len(plants),

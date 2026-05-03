@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
@@ -206,6 +206,31 @@ def refresh_tasks():
         unique_by_id[task["id"]] = task
 
     merged = sorted(unique_by_id.values(), key=lambda t: t["due_date"])
+
+    # Keep one urgent task available for demos when no near-term risk exists yet.
+    risk_window_end = date.today() + timedelta(days=4)
+    has_near_due_incomplete = any(
+        (not task.get("completed")) and date.fromisoformat(task["due_date"]) <= risk_window_end
+        for task in merged
+    )
+
+    if plants and not has_near_due_incomplete:
+        demo_plant = plants[0]
+        demo_due = date.today().isoformat()
+        demo_task_id = f"{demo_plant['id']}-demo-risk-{demo_due}"
+        if demo_task_id not in unique_by_id:
+            merged.append(
+                {
+                    "id": demo_task_id,
+                    "plant_id": demo_plant["id"],
+                    "plant_nickname": demo_plant["nickname"],
+                    "type": "check_soil",
+                    "due_date": demo_due,
+                    "completed": False,
+                }
+            )
+            merged = sorted(merged, key=lambda t: t["due_date"])
+
     write_collection("tasks", merged)
     return merged
 
@@ -282,6 +307,19 @@ def planter_saved():
     prefs = read_planter_preferences()
     interested = set(prefs.get("interested", []))
     return [item for item in species if item["id"] in interested]
+
+
+@app.delete("/planter/saved/{species_id}")
+def remove_saved_species(species_id: str):
+    prefs = read_planter_preferences()
+    interested = prefs.get("interested", [])
+
+    if species_id not in interested:
+        raise HTTPException(status_code=404, detail="Species not in saved list")
+
+    prefs["interested"] = [sid for sid in interested if sid != species_id]
+    write_planter_preferences(prefs)
+    return {"removed": True, "species_id": species_id}
 
 
 @app.post("/planter/add-to-collection")
