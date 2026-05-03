@@ -305,7 +305,7 @@ def add_saved_to_collection(payload: AddSavedPlantRequest):
         "soil_type": "standard_potting_mix",
         "drainage_quality": "good",
         "environment_id": payload.environment_id,
-        "notes": "Added from Planter discovery.",
+        "notes": "Added from PlantR discovery.",
     }
 
     plants.append(new_plant)

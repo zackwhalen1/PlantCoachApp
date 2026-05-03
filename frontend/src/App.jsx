@@ -19,7 +19,7 @@ const tabs = [
   { key: 'calendar', label: 'Calendar' },
   { key: 'compatibility', label: 'Compatibility' },
   { key: 'diagnosis', label: 'Diagnosis' },
-  { key: 'planter', label: 'Planter' },
+  { key: 'planter', label: 'PlantR' },
 ]
 
 function App() {

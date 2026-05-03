@@ -50,7 +50,12 @@ export function PlantForm({ environments, initialValue, onSubmit, onCancel }) {
       <div className="grid gap-3 md:grid-cols-4">
         <Input label="Category" value={form.category} onChange={(v) => updateField('category', v)} />
         <Input label="Date Acquired" type="date" value={form.date_acquired} onChange={(v) => updateField('date_acquired', v)} />
-        <Input label="Pot Size" value={form.pot_size} onChange={(v) => updateField('pot_size', v)} />
+        <Select
+          label="Pot Size"
+          value={form.pot_size}
+          options={['2 in', '4 in', '6 in', '8 in', '10 in', '12 in', '14 in', '16+ in']}
+          onChange={(v) => updateField('pot_size', v)}
+        />
         <Select
           label="Drainage"
           value={form.drainage_quality}

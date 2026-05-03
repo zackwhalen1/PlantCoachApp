@@ -62,11 +62,21 @@ export function EnvironmentForm({ initialValue, onSubmit, onCancel }) {
           onChange={(v) => updateField('humidity_level', v)}
         />
         <Input label="Temperature Range" value={form.temperature_range} onChange={(v) => updateField('temperature_range', v)} />
-        <Input label="Airflow" value={form.airflow_level} onChange={(v) => updateField('airflow_level', v)} />
+        <Select
+          label="Airflow"
+          value={form.airflow_level}
+          options={['none', 'gentle', 'moderate', 'strong']}
+          onChange={(v) => updateField('airflow_level', v)}
+        />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <Input label="Distance from Window" value={form.distance_from_window} onChange={(v) => updateField('distance_from_window', v)} />
+        <Select
+          label="Distance from Window"
+          value={form.distance_from_window}
+          options={['< 1 ft', '1 ft', '2 ft', '3 ft', '5 ft', '8 ft', '> 10 ft']}
+          onChange={(v) => updateField('distance_from_window', v)}
+        />
       </div>
 
       <label className="text-sm font-medium text-emerald-950">
