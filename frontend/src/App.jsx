@@ -6,7 +6,7 @@ import { CompatibilityPanel } from './components/CompatibilityPanel'
 import { DashboardView } from './components/DashboardView'
 import { DiagnosisWizard } from './components/DiagnosisWizard'
 import { EnvironmentForm } from './components/EnvironmentForm'
-import { PlantCoachPanel } from './components/PlantCoachPanel'
+import { FloatingCoachWidget } from './components/FloatingCoachWidget'
 import { PlanterView } from './components/PlanterView'
 import { PlantForm } from './components/PlantForm'
 import { ActionButton, EmptyState, SectionTitle, Surface } from './components/UI'
@@ -20,7 +20,6 @@ const tabs = [
   { key: 'compatibility', label: 'Compatibility' },
   { key: 'diagnosis', label: 'Diagnosis' },
   { key: 'planter', label: 'Planter' },
-  { key: 'coach', label: 'Plant Coach' },
 ]
 
 function App() {
@@ -298,9 +297,9 @@ function App() {
             onUpdated={refreshEverything}
           />
         )}
-
-        {activeTab === 'coach' && <PlantCoachPanel />}
       </main>
+
+      <FloatingCoachWidget />
     </div>
   )
 }

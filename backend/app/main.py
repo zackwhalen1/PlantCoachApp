@@ -4,6 +4,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .agent import ask_local_agent
 from .logic import (
     compatibility_score,
     diagnose,
@@ -314,26 +315,49 @@ def add_saved_to_collection(payload: AddSavedPlantRequest):
 
 @app.post("/plant-coach")
 def plant_coach(payload: PlantCoachQuestion):
-    question = payload.question.lower()
+    question = payload.question.strip()
     plants = read_collection("plants")
+    environments = read_collection("environments")
     tasks = read_collection("tasks")
 
-    if "water" in question:
+    llm_response = ask_local_agent(question, plants, environments, tasks)
+    if llm_response["mode"] == "local-llm":
+        return llm_response
+
+    lowered = question.lower()
+
+    if "water" in lowered:
         due = [t for t in tasks if t["type"] == "water_if_needed" and not t["completed"]][:3]
         if due:
             names = ", ".join(t["plant_nickname"] for t in due)
             return {
-                "reply": f"Focus on soil checks for {names}. Water only if the top layer is dry.",
-                "mode": "rule-based",
+                "reply": (
+                    f"Focus on soil checks for {names}. Water only if the top layer is dry. "
+                    "(Local model unavailable, using built-in fallback.)"
+                ),
+                "mode": "rule-based-fallback",
+                "model": llm_response.get("model"),
             }
-        return {"reply": "No immediate watering tasks. Keep checking soil before watering.", "mode": "rule-based"}
+        return {
+            "reply": "No immediate watering tasks. Keep checking soil before watering. (Fallback mode)",
+            "mode": "rule-based-fallback",
+            "model": llm_response.get("model"),
+        }
 
-    if "beginner" in question or "easy" in question:
+    if "beginner" in lowered or "easy" in lowered:
         easy = [p["nickname"] for p in plants if p.get("category") in ("succulent_like", "foliage")]
         reply = ", ".join(easy[:4]) if easy else "Snake Plant or Pothos"
-        return {"reply": f"Beginner-friendly picks in your collection: {reply}.", "mode": "rule-based"}
+        return {
+            "reply": f"Beginner-friendly picks in your collection: {reply}. (Fallback mode)",
+            "mode": "rule-based-fallback",
+            "model": llm_response.get("model"),
+        }
 
     return {
-        "reply": "Plant Coach stub: I can summarize watering, risk, and environment fit from your saved data.",
-        "mode": "rule-based",
+        "reply": (
+            "Plant Coach local model is not reachable right now. Start Ollama to enable full local AI answers. "
+            "For now I can still provide watering and beginner guidance using rules."
+        ),
+        "mode": "rule-based-fallback",
+        "model": llm_response.get("model"),
     }

@@ -11,7 +11,8 @@ GreenrThumb is a design-centered plant care web app for managing houseplants wit
 - Symptom diagnosis wizard with ranked causes, confidence, actions, and caution note
 - Care calendar with chronological tasks and completion toggles
 - Dashboard with collection and risk summary
-- Plant Coach rule-based assistant stub (AI-ready module)
+- Plant Coach assistant available from a bottom-left launcher on every page
+- Local AI mode via Ollama (on-machine model) with automatic rule-based fallback
 - Planter discovery with Interested/Not Interested decisions, saved species list, recommendation logic, and add-to-collection flow
 
 ## Technology Stack
@@ -59,6 +60,31 @@ npm run dev
 
 Frontend URL: `http://localhost:5173`
 
+### 3) Optional local AI agent (recommended)
+
+GreenrThumb can run Plant Coach using a local Ollama model on this machine.
+
+1. Install Ollama from https://ollama.com/download
+2. Pull a model (example):
+
+```powershell
+ollama pull llama3.2:3b
+```
+
+3. Start Ollama (if not already running):
+
+```powershell
+ollama serve
+```
+
+4. Optional: choose model via environment variable before starting backend:
+
+```powershell
+$env:OLLAMA_MODEL="llama3.2:3b"
+```
+
+By default, backend calls `http://localhost:11434/api/generate`. If Ollama is unavailable, Plant Coach automatically falls back to built-in rules.
+
 ## How to Run Tests
 
 ```powershell
@@ -85,6 +111,7 @@ Main endpoints:
 - Diagnosis is heuristic/rule-based and not a medical-grade model for plant pathology.
 - Task generation is interval-based and does not yet track true last-completed timestamps per care type.
 - Plant image URLs are seeded placeholders.
+- Local AI answers depend on your locally installed model quality and available RAM/CPU.
 - No user authentication or multi-user support in this first version.
 
 ## Future Improvements
